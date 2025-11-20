@@ -92,7 +92,10 @@ const loadPromises = [];
 
 geojsonFiles.forEach(item => {
     const promise = fetch(item.file)
-        .then(res => res.json())
+        .then(res => {
+            if(!res.ok) throw new Error('HTTP error! Status: ' + res.status + ' for ' + item.file);
+            return res.json();
+        })
         .then(data => {
             L.geoJSON(data, {
                 style: item.style,
@@ -106,7 +109,8 @@ geojsonFiles.forEach(item => {
                     layer.bindPopup(popup);
                 }
             }).addTo(map);
-        });
+        })
+        .catch(err => console.error(err));
     loadPromises.push(promise);
 });
 
@@ -115,6 +119,11 @@ let routingControl = null;
 function createRoute(profile='fastest'){
     if(routingControl) map.removeControl(routingControl);
 
+    if(nurseryWaypoints.length===0){
+        console.warn("Nurseries not loaded yet.");
+        return;
+    }
+
     const finalWaypoints = [
         L.Routing.waypoint(NAIROBI_START, 'Nairobi (Start)'),
         ...nurseryWaypoints,
@@ -122,13 +131,14 @@ function createRoute(profile='fastest'){
     ];
 
     routingControl = L.Routing.control({
-        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1', profile: profile }),
+        router: L.Routing.osrmv1({ serviceUrl:'https://router.project-osrm.org/route/v1', profile: profile }),
         waypoints: finalWaypoints,
         routeWhileDragging: false,
         show: true,
         language: 'en',
         lineOptions: { styles:[{color:'#D495A5', weight:6, opacity:0.8}] }
     }).addTo(map);
+
     map.setZoom(7);
 }
 
@@ -147,7 +157,6 @@ document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
     if(routingControl) map.removeControl(routingControl);
     routingControl = null;
 });
-
 </script>
 </body>
 </html>
