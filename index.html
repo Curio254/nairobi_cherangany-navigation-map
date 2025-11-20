@@ -3,16 +3,23 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cherangany Forest Tree Nurseries Navigation Map</title>
+<title>Nairobi → Cherangany Forest Navigation Map</title>
 
 <!-- Leaflet CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
 
 <style>
-  body, html {margin:0; padding:0; height:100%; font-family: 'Poppins', sans-serif;}
-  #map {height: 100vh; width: 100%;}
-  .leaflet-popup-content {font-size: 14px;}
-  @media(max-width:600px){ #map{height:100vh;} }
+  body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+    font-family: 'Poppins', sans-serif;
+  }
+  #map {
+    height: 100vh;
+    width: 100%;
+  }
 </style>
 </head>
 <body>
@@ -22,62 +29,53 @@
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 
-<!-- OpenRouteService JS -->
-<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.min.js"></script>
-
 <script>
-  // Initialize map centered roughly on Cherangany Forest
-  var map = L.map('map').setView([0.3, 35.4], 9);
+  // Initialize map near Cherangany Forest
+  var map = L.map('map').setView([0.9, 35.5], 10);
 
-  // Add OpenStreetMap tiles
+  // Add OpenStreetMap tile layer
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '© OpenStreetMap'
+      attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  // Load Forest Polygon
+  // Load Cherangany Forest polygon
   fetch('Cherengany_Fblock_WGS84.geojson')
     .then(res => res.json())
     .then(data => {
       L.geoJSON(data, {
-        style: {color:'green', weight:2, fillOpacity:0.1}
+        style: {
+          color: 'green',
+          weight: 2,
+          fillOpacity: 0.2
+        }
       }).addTo(map);
     });
 
-  // Function to load nurseries
-  function loadNurseries(file, color){
-    fetch(file)
-      .then(res => res.json())
-      .then(data => {
-        L.geoJSON(data, {
-          pointToLayer: function(feature, latlng){
-            return L.marker(latlng, {icon: L.icon({
-              iconUrl: 'https://cdn-icons-png.flaticon.com/512/252/252025.png',
-              iconSize: [25,25],
-              iconAnchor: [12,25]
-            })}).bindPopup("<b>"+(feature.properties.name||"Tree Nursery")+"</b>");
-          }
-        }).addTo(map);
-      });
-  }
+  // Load Elgeyo Marakwet nurseries
+  fetch('Elgeyo_Marakwet_County.geojson')
+    .then(res => res.json())
+    .then(data => {
+      L.geoJSON(data, {
+        pointToLayer: function(feature, latlng){
+          return L.marker(latlng)
+            .bindPopup("<b>" + (feature.properties.name || "Marakwet Nursery") + "</b>");
+        }
+      }).addTo(map);
+    });
 
-  loadNurseries('Elgeyo_Marakwet_County.geojson', 'blue');
-  loadNurseries('West_Pokot_County.geojson', 'orange');
+  // Load West Pokot nurseries
+  fetch('West_Pokot_County.geojson')
+    .then(res => res.json())
+    .then(data => {
+      L.geoJSON(data, {
+        pointToLayer: function(feature, latlng){
+          return L.marker(latlng)
+            .bindPopup("<b>" + (feature.properties.name || "West Pokot Nursery") + "</b>");
+        }
+      }).addTo(map);
+    });
 
-  // Optional: Routing from Nairobi (0.3476, 36.7073) to first nursery (example)
-  // Uncomment if you have OpenRouteService API key and want live routing
-  /*
-  var control = L.Routing.control({
-    waypoints: [
-      L.latLng(0.3476, 36.7073), // Nairobi
-      L.latLng(-0.5, 35.3) // Example destination, replace with a selected nursery
-    ],
-    router: L.Routing.openrouteservice('YOUR_API_KEY_HERE'),
-    routeWhileDragging: true
-  }).addTo(map);
-  */
 </script>
 
 </body>
 </html>
-
