@@ -131,7 +131,7 @@ let westPokotPoints = [];
 let cheranganyCentroid = null;
 
 // -----------------------------------------------
-// LOAD GEOJSON FILES
+// LOAD GEOJSON FILES WITH NAMES IN POPUPS
 function loadGeoJSON(url, targetArray, isPolygon=false) {
     fetch(url)
         .then(r => r.json())
@@ -140,7 +140,9 @@ function loadGeoJSON(url, targetArray, isPolygon=false) {
                 onEachFeature: function(feature, layer){
                     if (!isPolygon) {
                         targetArray.push(layer.getLatLng());
-                        layer.bindPopup("Nursery Location");
+                        // Show actual name if exists in GeoJSON
+                        const name = feature.properties?.name || "Unnamed Nursery";
+                        layer.bindPopup(`<strong>${name}</strong>`);
                     } else {
                         layer.bindPopup("Cherangany Forest Block");
                         cheranganyCentroid = layer.getBounds().getCenter();
@@ -153,7 +155,7 @@ function loadGeoJSON(url, targetArray, isPolygon=false) {
 
 loadGeoJSON("elgeyo_marakwet_county.json", elgeyoPoints);
 loadGeoJSON("west_pokot_county.json", westPokotPoints);
-loadGeoJSON("cherengany_fblock_wgs84.json", [], true);
+loadGeoJSON("cherangany_fblock_wgs84.json", [], true);
 
 // -----------------------------------------------
 // ROUTING FUNCTIONS
