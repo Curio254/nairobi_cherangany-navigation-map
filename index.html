@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -7,6 +8,7 @@
 
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
 <!-- Leaflet Routing Machine CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
 
@@ -16,155 +18,114 @@
         padding: 0;
         height: 100%;
         width: 100%;
-        font-family: sans-serif;
     }
     #map {
         height: 100vh;
         width: 100%;
     }
 
-    /* Floating routing box */
-    #routing-container {
-        position: fixed;
-        top: 80px;
-        right: 10px;
-        width: 260px;
-        background: rgba(255,255,255,0.95);
-        border-radius: 12px;
-        box-shadow: 0 2px 10px rgba(0,0,0,0.3);
-        z-index: 1000;
-        overflow: hidden;
-        transition: transform 0.3s ease, opacity 0.3s ease;
-        transform: translateX(110%);
-        opacity: 0;
+    /* Mobile responsive */
+    @media (max-width: 600px) {
+        #map {
+            height: 100vh;
+        }
     }
-    #routing-container.visible {
-        transform: translateX(0);
-        opacity: 1;
-    }
-    #routing-header {
-        background: #C2185B;
-        color: white;
-        font-weight: 600;
-        padding: 10px;
-        cursor: pointer;
-        text-align: center;
-    }
-    #routing-panel {
-        padding: 10px;
-    }
-    #routing-panel button {
-        width: 100%;
-        margin: 5px 0;
-        padding: 8px;
-        border: none;
-        border-radius: 8px;
-        background: #f1c0c0;
-        font-weight: 600;
-        cursor: pointer;
-    }
-    #routing-panel button:hover { background: #e59494; }
 </style>
 </head>
 <body>
 
 <div id="map"></div>
 
-<!-- Collapsible routing panel -->
-<div id="routing-container">
-    <div id="routing-header">🗺️ Show / Hide Navigation</div>
-    <div id="routing-panel">
-        <button id="fastestBtn">Fastest Route</button>
-        <button id="shortestBtn">Shortest Route</button>
-        <button id="clearRouteBtn">Clear Route</button>
-    </div>
-</div>
-
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
 <!-- Leaflet Routing Machine JS -->
 <script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
 
 <script>
-// Global array to store all nursery coordinates
+// Global array to store all nursery coordinates for routing
 const nurseryWaypoints = [];
+
+// Fixed starting point = Nairobi City Centre (Kenyatta Avenue area)
 const NAIROBI_START = L.latLng(-1.28333, 36.8167);
 
 // Initialize map
 var map = L.map('map').setView([0.7, 35.4], 8);
+
+// Base map
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     attribution: '© OpenStreetMap'
 }).addTo(map);
 
-// GeoJSON files
-const geojsonFiles = [
-    {file: 'cherangany_fblock_wgs84.json', style:{color:'green', weight:3, fillOpacity:0.25}, name:'Cherangany Forest Block', type: 'polygon'},
+// GeoJSON files in root
+var geojsonFiles = [
+    {file: 'cherengany_fblock_wgs84.json', style:{color:'green', weight:3, fillOpacity:0.25}, name:'Cherangany Forest Block', type: 'polygon'},
     {file: 'elgeyo_marakwet_county.json', style:{color:'blue'}, name:'Elgeyo Marakwet Nurseries', type: 'point'},
     {file: 'west_pokot_county.json', style:{color:'orange'}, name:'West Pokot Nurseries', type: 'point'}
 ];
 
-let loadPromises = [];
+// Load promises tracker
+const loadPromises = [];
+
+// Load each GeoJSON layer
 geojsonFiles.forEach(item => {
     const promise = fetch(item.file)
-        .then(res => res.json())
+        .then(res => {
+            if (!res.ok) throw new Error("Error loading: " + item.file);
+            return res.json();
+        })
         .then(data => {
             L.geoJSON(data, {
                 style: item.style,
                 pointToLayer: function(feature, latlng){
-                    if(item.type==='point'){ nurseryWaypoints.push(latlng); return L.marker(latlng); }
+                    if (item.type === 'point') {
+                        nurseryWaypoints.push(latlng);
+                        return L.marker(latlng);
+                    }
                 },
                 onEachFeature: function(feature, layer){
                     let popup = `<strong>${item.name}</strong>`;
-                    if(feature.properties?.name) popup += `<br>${feature.properties.name}`;
+                    if (feature.properties?.name) popup += `<br>${feature.properties.name}`;
                     layer.bindPopup(popup);
                 }
             }).addTo(map);
         })
         .catch(err => console.error(err));
+
     loadPromises.push(promise);
 });
 
-let routingControl = null;
+// After all layers load → generate route
+Promise.all(loadPromises).then(() => {
 
-// Function to create route
-function createRoute(profile='fastest'){
-    if(routingControl) map.removeControl(routingControl);
-    if(nurseryWaypoints.length === 0){ console.warn("Nurseries not loaded yet."); return; }
+    if (nurseryWaypoints.length === 0) {
+        console.warn("⚠️ No nursery points found in GeoJSON files.");
+        return;
+    }
 
+    // Create ordered route waypoints:
+    // Nairobi → all nursery points → last nursery
     const finalWaypoints = [
         L.Routing.waypoint(NAIROBI_START, "Nairobi (Start)"),
         ...nurseryWaypoints.map(pt => L.Routing.waypoint(pt)),
-        L.Routing.waypoint(nurseryWaypoints[nurseryWaypoints.length-1], "Final Nursery (End)")
+        L.Routing.waypoint(nurseryWaypoints[nurseryWaypoints.length - 1], "Final Nursery (End)")
     ];
 
-    routingControl = L.Routing.control({
-        router: L.Routing.osrmv1({ serviceUrl: 'https://router.project-osrm.org/route/v1', profile: profile }),
+    L.Routing.control({
+        router: L.Routing.osrmv1({
+            serviceUrl: 'https://router.project-osrm.org/route/v1'
+        }),
         waypoints: finalWaypoints,
         routeWhileDragging: false,
         showAlternatives: true,
-        lineOptions: { styles:[{color:'#C2185B', weight:6, opacity:0.85}] },
+        lineOptions: {
+            styles: [{ color: '#C2185B', weight: 6, opacity: 0.85 }]
+        },
         language: 'en'
     }).addTo(map);
 
     map.setZoom(7);
-}
-
-// Load default route after GeoJSON loads
-Promise.all(loadPromises).then(()=>{ createRoute('fastest'); });
-
-// Floating box toggle
-const routingContainer = document.getElementById('routing-container');
-document.getElementById('routing-header').addEventListener('click', ()=>{
-    routingContainer.classList.toggle('visible');
-});
-
-// Buttons
-document.getElementById('fastestBtn').addEventListener('click', ()=>createRoute('fastest'));
-document.getElementById('shortestBtn').addEventListener('click', ()=>createRoute('shortest'));
-document.getElementById('clearRouteBtn').addEventListener('click', ()=>{
-    if(routingControl) map.removeControl(routingControl);
-    routingControl = null;
 });
 </script>
 
