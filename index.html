@@ -1,132 +1,193 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Nairobi → Cherangany Navigation Map</title>
+    <meta charset="utf-8">
+    <title>Nairobi → Cherangany Forest Navigation Map</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
-<!-- Leaflet CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 
-<!-- Leaflet Routing Machine CSS -->
-<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+    <!-- Routing machine CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.css"
+    />
 
-<style>
-    body, html {
-        margin: 0;
-        padding: 0;
-        height: 100%;
-        width: 100%;
-    }
-    #map {
-        height: 100vh;
-        width: 100%;
-    }
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            height: 100%;
+            font-family: Arial, sans-serif;
+        }
 
-    /* Mobile responsive */
-    @media (max-width: 600px) {
         #map {
+            width: 100%;
             height: 100vh;
         }
-    }
-</style>
+
+        /* FLOATING NAVIGATION PANEL */
+        #nav-panel {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            background: white;
+            padding: 12px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.25);
+            z-index: 9999;
+            width: 210px;
+        }
+
+        #nav-panel button {
+            width: 100%;
+            padding: 8px;
+            margin-bottom: 6px;
+            border: none;
+            background: #1976D2;
+            color: white;
+            font-size: 14px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        #nav-panel button:hover {
+            background: #0F4FA8;
+        }
+
+        #nav-panel h3 {
+            font-size: 15px;
+            margin-top: 0;
+            margin-bottom: 8px;
+            text-align: center;
+        }
+    </style>
 </head>
 <body>
+
+<div id="nav-panel">
+    <h3>Navigation Options</h3>
+
+    <button onclick="routeAll()">Route: All Nurseries</button>
+    <button onclick="routeElgeyo()">Route: Elgeyo Only</button>
+    <button onclick="routeWest()">Route: West Pokot Only</button>
+    <button onclick="routeCherangany()">Route: Cherangany Forest</button>
+
+    <button onclick="setFastest()">Fastest Route</button>
+    <button onclick="setShortest()">Shortest Route</button>
+
+    <button onclick="clearRoute()" style="background:#B71C1C;">Clear Route</button>
+</div>
 
 <div id="map"></div>
 
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-<!-- Leaflet Routing Machine JS -->
-<script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+<!-- Routing Machine -->
+<script src="https://unpkg.com/leaflet-routing-machine/dist/leaflet-routing-machine.js"></script>
 
 <script>
-// Global array to store all nursery coordinates for routing
-const nurseryWaypoints = [];
+// -----------------------------------------------
+// FIXED START POINT (NAIROBI – Kenyatta Avenue)
+// -----------------------------------------------
+const NAIROBI = L.latLng(-1.28333, 36.8167);
 
-// Fixed starting point = Nairobi City Centre (Kenyatta Avenue area)
-const NAIROBI_START = L.latLng(-1.28333, 36.8167);
+// -----------------------------------------------
+// MAP INITIALISATION
+// -----------------------------------------------
+var map = L.map('map').setView([0.8, 35.3], 8);
 
-// Initialize map
-var map = L.map('map').setView([0.7, 35.4], 8);
-
-// Base map
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
-    attribution: '© OpenStreetMap'
+    attribution: '&copy; OpenStreetMap'
 }).addTo(map);
 
-// GeoJSON files in root
-var geojsonFiles = [
-    {file: 'cherengany_fblock_wgs84.json', style:{color:'green', weight:3, fillOpacity:0.25}, name:'Cherangany Forest Block', type: 'polygon'},
-    {file: 'elgeyo_marakwet_county.json', style:{color:'blue'}, name:'Elgeyo Marakwet Nurseries', type: 'point'},
-    {file: 'west_pokot_county.json', style:{color:'orange'}, name:'West Pokot Nurseries', type: 'point'}
-];
+// Routing control (created later)
+let routingControl = null;
 
-// Load promises tracker
-const loadPromises = [];
+// -----------------------------------------------
+// STORAGE ARRAYS FOR GEOJSON POINTS
+// -----------------------------------------------
+let elgeyoPoints = [];
+let westPokotPoints = [];
+let cheranganyCentroid = null;
 
-// Load each GeoJSON layer
-geojsonFiles.forEach(item => {
-    const promise = fetch(item.file)
-        .then(res => {
-            if (!res.ok) throw new Error("Error loading: " + item.file);
-            return res.json();
-        })
+// -----------------------------------------------
+// LOAD GEOJSON FILES
+// -----------------------------------------------
+function loadGeoJSON(url, targetArray, isPolygon=false) {
+    fetch(url)
+        .then(r => r.json())
         .then(data => {
             L.geoJSON(data, {
-                style: item.style,
-                pointToLayer: function(feature, latlng){
-                    if (item.type === 'point') {
-                        nurseryWaypoints.push(latlng);
-                        return L.marker(latlng);
+                onEachFeature: function(feature, layer){
+                    if (!isPolygon) {
+                        targetArray.push(layer.getLatLng());
+                        layer.bindPopup("Nursery Location");
+                    } else {
+                        layer.bindPopup("Cherangany Forest Block");
+                        cheranganyCentroid = layer.getBounds().getCenter();
                     }
                 },
-                onEachFeature: function(feature, layer){
-                    let popup = `<strong>${item.name}</strong>`;
-                    if (feature.properties?.name) popup += `<br>${feature.properties.name}`;
-                    layer.bindPopup(popup);
-                }
+                style: isPolygon ? { color:'green', weight:2, fillOpacity:0.15 } : undefined
             }).addTo(map);
-        })
-        .catch(err => console.error(err));
+        });
+}
 
-    loadPromises.push(promise);
-});
+loadGeoJSON("elgeyo_marakwet_county.json", elgeyoPoints);
+loadGeoJSON("west_pokot_county.json", westPokotPoints);
+loadGeoJSON("cherengany_fblock_wgs84.json", [], true);
 
-// After all layers load → generate route
-Promise.all(loadPromises).then(() => {
+// -----------------------------------------------
+// ROUTING FUNCTIONS
+// -----------------------------------------------
+function createRoute(waypoints) {
+    if (routingControl) map.removeControl(routingControl);
 
-    if (nurseryWaypoints.length === 0) {
-        console.warn("⚠️ No nursery points found in GeoJSON files.");
-        return;
-    }
-
-    // Create ordered route waypoints:
-    // Nairobi → all nursery points → last nursery
-    const finalWaypoints = [
-        L.Routing.waypoint(NAIROBI_START, "Nairobi (Start)"),
-        ...nurseryWaypoints.map(pt => L.Routing.waypoint(pt)),
-        L.Routing.waypoint(nurseryWaypoints[nurseryWaypoints.length - 1], "Final Nursery (End)")
-    ];
-
-    L.Routing.control({
-        router: L.Routing.osrmv1({
-            serviceUrl: 'https://router.project-osrm.org/route/v1'
-        }),
-        waypoints: finalWaypoints,
+    routingControl = L.Routing.control({
+        waypoints: waypoints,
         routeWhileDragging: false,
-        showAlternatives: true,
-        lineOptions: {
-            styles: [{ color: '#C2185B', weight: 6, opacity: 0.85 }]
-        },
-        language: 'en'
+        show: true,
+        router: L.Routing.osrmv1(),
+        lineOptions: { styles: [{color: '#D4126A', weight: 6}] }
     }).addTo(map);
+}
 
-    map.setZoom(7);
-});
+function routeAll() {
+    createRoute([NAIROBI, ...elgeyoPoints, ...westPokotPoints]);
+}
+
+function routeElgeyo() {
+    createRoute([NAIROBI, ...elgeyoPoints]);
+}
+
+function routeWest() {
+    createRoute([NAIROBI, ...westPokotPoints]);
+}
+
+function routeCherangany() {
+    if (cheranganyCentroid)
+        createRoute([NAIROBI, cheranganyCentroid]);
+}
+
+function clearRoute() {
+    if (routingControl) map.removeControl(routingControl);
+}
+
+// -----------------------------------------------
+// FASTEST & SHORTEST
+// -----------------------------------------------
+function setFastest() {
+    if (!routingControl) return;
+    routingControl.setRouter(L.Routing.osrmv1({ profile: "driving" }));
+}
+
+function setShortest() {
+    if (!routingControl) return;
+    routingControl.setRouter(L.Routing.osrmv1({ profile: "driving", alternatives: true }));
+}
 </script>
 
 </body>
