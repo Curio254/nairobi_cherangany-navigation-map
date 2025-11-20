@@ -137,14 +137,19 @@ function loadGeoJSON(url, targetArray, isPolygon=false) {
         .then(r => r.json())
         .then(data => {
             L.geoJSON(data, {
-                onEachFeature: function(feature, layer){
+                pointToLayer: function(feature, latlng) {
                     if (!isPolygon) {
-                        targetArray.push(layer.getLatLng());
-                        // Show actual name if exists in GeoJSON
-                        const name = feature.properties?.name || "Unnamed Nursery";
-                        layer.bindPopup(`<strong>${name}</strong>`);
-                    } else {
-                        layer.bindPopup("Cherangany Forest Block");
+                        const nurseryName = feature.properties?.Name || 'Nursery Location';
+                        const marker = L.marker(latlng);
+                        marker.bindPopup(`<strong>${nurseryName}</strong>`);
+                        targetArray.push(latlng);
+                        return marker;
+                    }
+                },
+                onEachFeature: function(feature, layer){
+                    if (isPolygon) {
+                        const forestName = feature.properties?.Name || 'Cherangany Forest Block';
+                        layer.bindPopup(`<strong>${forestName}</strong>`);
                         cheranganyCentroid = layer.getBounds().getCenter();
                     }
                 },
